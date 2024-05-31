@@ -304,12 +304,18 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
                     ),
                 }
             }
-            ENodeOrVar::Var(_) => rewrite::search_eclasses_with_limit(
-                self,
-                egraph,
-                egraph.classes().map(|e| e.id),
-                limit,
-            ),
+            ENodeOrVar::Var(v) => egraph
+                .classes()
+                .map(|e| {
+                    let mut subst = Subst::with_capacity(1);
+                    subst.insert(*v, e.id);
+                    SearchMatches {
+                        eclass: e.id,
+                        substs: vec![subst],
+                        ast: Some(Cow::Borrowed(&self.ast)),
+                    }
+                })
+                .collect(),
         }
     }
 

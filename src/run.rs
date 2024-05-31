@@ -417,7 +417,7 @@ where
             self.iterations.push(iter);
             let stop_reason = self.iterations.last().unwrap().stop_reason.clone();
             // we need to check_limits after the iteration is complete to check for iter_limit
-            if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits().err()) {
+            if let Some(stop_reason) = stop_reason.or_else(|| self.check_limits(true).err()) {
                 info!("Stopping: {:?}", stop_reason);
                 self.stop_reason = Some(stop_reason);
                 break;
@@ -513,7 +513,7 @@ where
         info!("\nIteration {}", self.iterations.len());
 
         self.try_start();
-        let mut result = self.check_limits();
+        let mut result = self.check_limits(true);
 
         let egraph_nodes = self.egraph.total_size();
         let egraph_classes = self.egraph.number_of_classes();
@@ -542,7 +542,7 @@ where
             rules.iter().try_for_each(|rw| {
                 let ms = self.scheduler.search_rewrite(i, &self.egraph, rw);
                 matches.push(ms);
-                self.check_limits()
+                self.check_limits(false)
             })
         });
 
@@ -565,7 +565,7 @@ where
                     }
                     debug!("Applied {} {} times", rw.name, actually_matched);
                 }
-                self.check_limits()
+                self.check_limits(false)
             })
         });
 
@@ -619,10 +619,12 @@ where
         self.start_time.get_or_insert_with(Instant::now);
     }
 
-    fn check_limits(&self) -> RunnerResult<()> {
-        let elapsed = self.start_time.unwrap().elapsed();
-        if elapsed > self.time_limit {
-            return Err(StopReason::TimeLimit(elapsed.as_secs_f64()));
+    fn check_limits(&self, check_time: bool) -> RunnerResult<()> {
+        if check_time {
+            let elapsed = self.start_time.unwrap().elapsed();
+            if elapsed > self.time_limit {
+                return Err(StopReason::TimeLimit(elapsed.as_secs_f64()));
+            }
         }
 
         let size = self.egraph.total_size();

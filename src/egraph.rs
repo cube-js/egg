@@ -1461,12 +1461,16 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         let old_hc_size = self.memo.len();
         let old_n_eclasses = self.number_of_classes();
 
-        let start = Instant::now();
+        let start = if log_enabled!(log::Level::Info) {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         let n_unions = self.process_unions();
         let trimmed_nodes = self.rebuild_classes();
 
-        let elapsed = start.elapsed();
+        let elapsed = start.map(|s| s.elapsed()).unwrap_or_default();
         info!(
             concat!(
                 "REBUILT! in {}.{:03}s\n",
