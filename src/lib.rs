@@ -85,7 +85,7 @@ impl std::fmt::Display for Id {
     }
 }
 
-pub(crate) use {explain::Explain, unionfind::UnionFind};
+pub(crate) use {explain::Explain, machine::Machine, unionfind::UnionFind};
 
 pub use {
     dot::Dot,

@@ -99,6 +99,7 @@ impl From<u32> for Var {
 #[derive(Default, Clone)]
 pub struct Subst {
     pub(crate) vec: smallvec::SmallVec<[(Var, Id); 3]>,
+    /// A place to store arbitrary data associated with this subst
     pub data: Option<std::sync::Arc<dyn std::any::Any + 'static + Send + Sync>>,
 }
 

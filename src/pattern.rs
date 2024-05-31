@@ -125,6 +125,58 @@ impl<L: Language> Pattern<L> {
     pub fn vars(&self) -> Vec<Var> {
         self.ast.vars()
     }
+
+    /// Search this e-class for the pattern, using a callback to handle the results
+    #[allow(clippy::result_unit_err)]
+    pub fn search_eclass_with_fn<A>(
+        &self,
+        egraph: &EGraph<L, A>,
+        eclass: Id,
+        f: impl FnMut(&Subst) -> Result<(), ()>,
+    ) -> Result<(), ()>
+    where
+        A: Analysis<L>,
+    {
+        let mut machine = Machine::default();
+        machine.run_program(egraph, &self.program, eclass, f)
+    }
+
+    /// Search the e-graph for the pattern, using a callback to handle the results
+    #[allow(clippy::result_unit_err)]
+    pub fn search_with_fn<A>(
+        &self,
+        egraph: &EGraph<L, A>,
+        mut f: impl FnMut(Id, &Subst) -> Result<(), ()>,
+    ) -> Result<(), ()>
+    where
+        A: Analysis<L>,
+    {
+        match self.ast.as_ref().last().unwrap() {
+            ENodeOrVar::ENode(e) => {
+                let key = e.discriminant();
+                match egraph.classes_by_op.get(&key) {
+                    None => Ok(()),
+                    Some(ids) => {
+                        let mut machine = Machine::default();
+                        for id in ids {
+                            machine
+                                .run_program(egraph, &self.program, *id, |subst| f(*id, subst))?;
+                        }
+                        Ok(())
+                    }
+                }
+            }
+            ENodeOrVar::Var(v) => {
+                let mut subst = Subst::with_capacity(1);
+                for eclass in egraph.classes() {
+                    subst.insert(*v, eclass.id);
+                    debug_assert_eq!(subst.vec.len(), 1);
+                    f(eclass.id, &subst)?;
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 impl<L: Language + Display> Pattern<L> {
@@ -325,7 +377,8 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
         eclass: Id,
         limit: usize,
     ) -> Option<SearchMatches<L>> {
-        let substs = self.program.run_with_limit(egraph, eclass, limit);
+        let mut machine = Machine::default();
+        let substs = machine.run_program_collect_with_limit(egraph, &self.program, eclass, limit);
         if substs.is_empty() {
             None
         } else {

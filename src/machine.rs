@@ -4,7 +4,7 @@ use std::result;
 type Result = result::Result<(), ()>;
 
 #[derive(Default)]
-struct Machine {
+pub(crate) struct Machine {
     reg: Vec<Id>,
     // a buffer to re-use for lookups
     lookup: Vec<Id>,
@@ -92,8 +92,7 @@ impl Machine {
         &mut self,
         egraph: &EGraph<L, N>,
         instructions: &[Instruction<L>],
-        subst: &Subst,
-        yield_fn: &mut impl FnMut(&Self, &Subst) -> Result,
+        yield_fn: &mut impl FnMut(&Self) -> Result,
     ) -> Result
     where
         L: Language,
@@ -107,7 +106,7 @@ impl Machine {
                     return for_each_matching_node(&egraph[self.reg(*i)], node, |matched| {
                         self.reg.truncate(out.0 as usize);
                         matched.for_each(|id| self.reg.push(id));
-                        self.run(egraph, remaining_instructions, subst, yield_fn)
+                        self.run(egraph, remaining_instructions, yield_fn)
                     });
                 }
                 Instruction::Scan { out } => {
@@ -115,7 +114,7 @@ impl Machine {
                     for class in egraph.classes() {
                         self.reg.truncate(out.0 as usize);
                         self.reg.push(class.id);
-                        self.run(egraph, remaining_instructions, subst, yield_fn)?
+                        self.run(egraph, remaining_instructions, yield_fn)?
                     }
                     return Ok(());
                 }
@@ -149,7 +148,7 @@ impl Machine {
             }
         }
 
-        yield_fn(self, subst)
+        yield_fn(self)
     }
 }
 
@@ -340,62 +339,69 @@ impl<L: Language> Program<L> {
         }
         compiler.extract()
     }
+}
 
-    pub fn run_with_limit<A>(
-        &self,
-        egraph: &EGraph<L, A>,
+impl Machine {
+    pub fn run_program_collect_with_limit<L, N>(
+        &mut self,
+        egraph: &EGraph<L, N>,
+        program: &Program<L>,
         eclass: Id,
         mut limit: usize,
     ) -> Vec<Subst>
     where
-        A: Analysis<L>,
+        L: Language,
+        N: Analysis<L>,
+    {
+        let mut substs = Vec::new();
+        self.run_program(egraph, program, eclass, |subst| {
+            if limit == 0 {
+                Err(())
+            } else {
+                substs.push(subst.clone());
+                limit -= 1;
+                Ok(())
+            }
+        })
+        .unwrap_or_default();
+        substs
+    }
+
+    pub fn run_program<L, N>(
+        &mut self,
+        egraph: &EGraph<L, N>,
+        program: &Program<L>,
+        eclass: Id,
+        mut f: impl FnMut(&Subst) -> Result,
+    ) -> Result
+    where
+        L: Language,
+        N: Analysis<L>,
     {
         assert!(egraph.clean, "Tried to search a dirty e-graph!");
 
-        if limit == 0 {
-            return vec![];
-        }
+        self.reg.clear();
+        self.lookup.clear();
+        self.reg.push(eclass);
 
-        let mut machine = Machine::default();
-        assert_eq!(machine.reg.len(), 0);
-        machine.reg.push(eclass);
+        let mut template = program.subst.clone();
 
-        let mut matches = Vec::new();
-        machine
-            .run(
-                egraph,
-                &self.instructions,
-                &self.subst,
-                &mut |machine, subst| {
-                    if !egraph.analysis.allow_ematching_cycles() {
-                        if let Some((first, rest)) = machine.reg.split_first() {
-                            if rest.contains(first) {
-                                return Ok(());
-                            }
-                        }
+        self.run(egraph, &program.instructions, &mut |machine| {
+            if !egraph.analysis.allow_ematching_cycles() {
+                if let Some((first, rest)) = machine.reg.split_first() {
+                    if rest.contains(first) {
+                        return Ok(());
                     }
+                }
+            }
 
-                    let subst_vec = subst
-                        .vec
-                        .iter()
-                        // HACK we are reusing Ids here, this is bad
-                        .map(|(v, reg_id)| (*v, machine.reg(Reg(usize::from(*reg_id) as u32))))
-                        .collect();
-                    matches.push(Subst {
-                        vec: subst_vec,
-                        data: None,
-                    });
-                    limit -= 1;
-                    if limit != 0 {
-                        Ok(())
-                    } else {
-                        Err(())
-                    }
-                },
-            )
-            .unwrap_or_default();
+            for ((v1, reg), (v2, id)) in program.subst.vec.iter().zip(template.vec.iter_mut()) {
+                debug_assert_eq!(v1, v2);
+                // HACK we are reusing Ids here, this is bad
+                *id = machine.reg(Reg(usize::from(*reg) as u32));
+            }
 
-        log::trace!("Ran program, found {:?}", matches);
-        matches
+            f(&template)
+        })
     }
 }
