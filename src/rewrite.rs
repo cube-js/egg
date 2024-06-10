@@ -122,18 +122,16 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     }
 }
 
-/// Searches the given list of e-classes with a limit.
-pub(crate) fn search_eclasses_with_limit<'a, I, S, L, N>(
+pub(crate) fn default_search_eclasses_with_limit<'a, S, L, N>(
     searcher: &'a S,
     egraph: &EGraph<L, N>,
-    eclasses: I,
+    eclasses: impl Iterator<Item = Id>,
     mut limit: usize,
 ) -> Vec<SearchMatches<'a, L>>
 where
+    S: Searcher<L, N> + ?Sized,
     L: Language,
     N: Analysis<L>,
-    S: Searcher<L, N> + ?Sized,
-    I: IntoIterator<Item = Id>,
 {
     let mut ms = vec![];
     for eclass in eclasses {
@@ -184,6 +182,16 @@ where
         limit: usize,
     ) -> Option<SearchMatches<L>>;
 
+    /// Similar to search, but over a given iterator of e-classes.
+    fn search_eclasses_with_limit(
+        &self,
+        egraph: &EGraph<L, N>,
+        eclasses: &mut dyn Iterator<Item = Id>,
+        limit: usize,
+    ) -> Vec<SearchMatches<L>> {
+        default_search_eclasses_with_limit(self, egraph, eclasses, limit)
+    }
+
     /// Search the whole [`EGraph`], returning a list of all the
     /// [`SearchMatches`] where something was found.
     /// This just calls [`Searcher::search_with_limit`] with a big limit.
@@ -195,7 +203,7 @@ where
     ///
     /// [`search`]: Searcher::search
     fn search_with_limit(&self, egraph: &EGraph<L, N>, limit: usize) -> Vec<SearchMatches<L>> {
-        search_eclasses_with_limit(self, egraph, egraph.classes().map(|e| e.id), limit)
+        self.search_eclasses_with_limit(egraph, &mut egraph.classes().map(|e| e.id), limit)
     }
 
     /// Returns the number of matches in the e-graph

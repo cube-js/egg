@@ -143,9 +143,10 @@ impl<L: Language> Pattern<L> {
 
     /// Search the e-graph for the pattern, using a callback to handle the results
     #[allow(clippy::result_unit_err)]
-    pub fn search_with_fn<A>(
+    pub fn search_eclasses_with_fn<A>(
         &self,
         egraph: &EGraph<L, A>,
+        eclasses: impl Iterator<Item = Id>,
         mut f: impl FnMut(Id, &Subst) -> Result<(), ()>,
     ) -> Result<(), ()>
     where
@@ -158,9 +159,11 @@ impl<L: Language> Pattern<L> {
                     None => Ok(()),
                     Some(ids) => {
                         let mut machine = Machine::default();
-                        for id in ids {
-                            machine
-                                .run_program(egraph, &self.program, *id, |subst| f(*id, subst))?;
+                        for id in eclasses {
+                            if ids.contains(&id) {
+                                machine
+                                    .run_program(egraph, &self.program, id, |subst| f(id, subst))?;
+                            }
                         }
                         Ok(())
                     }
@@ -168,10 +171,10 @@ impl<L: Language> Pattern<L> {
             }
             ENodeOrVar::Var(v) => {
                 let mut subst = Subst::with_capacity(1);
-                for eclass in egraph.classes() {
-                    subst.insert(*v, eclass.id);
+                for id in eclasses {
+                    subst.insert(*v, id);
                     debug_assert_eq!(subst.vec.len(), 1);
-                    f(eclass.id, &subst)?;
+                    f(id, &subst)?;
                 }
                 Ok(())
             }
@@ -342,33 +345,55 @@ impl<L: Language, A: Analysis<L>> Searcher<L, A> for Pattern<L> {
         Some(&self.ast)
     }
 
-    fn search_with_limit(&self, egraph: &EGraph<L, A>, limit: usize) -> Vec<SearchMatches<L>> {
-        match self.ast.as_ref().last().unwrap() {
-            ENodeOrVar::ENode(e) => {
-                let key = e.discriminant();
-                match egraph.classes_by_op.get(&key) {
-                    None => vec![],
-                    Some(ids) => rewrite::search_eclasses_with_limit(
-                        self,
-                        egraph,
-                        ids.iter().cloned(),
-                        limit,
-                    ),
-                }
+    fn search_eclasses_with_limit(
+        &self,
+        egraph: &EGraph<L, A>,
+        eclasses: &mut dyn Iterator<Item = Id>,
+        mut limit: usize,
+    ) -> Vec<SearchMatches<L>> {
+        let mut result: Vec<SearchMatches<L>> = vec![];
+        self.search_eclasses_with_fn(egraph, eclasses, |id, list_subst| {
+            if limit == 0 {
+                return Err(());
             }
-            ENodeOrVar::Var(v) => egraph
-                .classes()
-                .map(|e| {
-                    let mut subst = Subst::with_capacity(1);
-                    subst.insert(*v, e.id);
-                    SearchMatches {
-                        eclass: e.id,
-                        substs: vec![subst],
-                        ast: Some(Cow::Borrowed(&self.ast)),
-                    }
-                })
-                .collect(),
-        }
+            limit -= 1;
+            match result.last_mut() {
+                Some(last) if last.eclass == id => last.substs.push(list_subst.clone()),
+                _ => result.push(SearchMatches {
+                    substs: vec![list_subst.clone()],
+                    eclass: id,
+                    ast: Some(Cow::Borrowed(&self.ast)),
+                }),
+            };
+            Ok(())
+        })
+        .unwrap_or_default();
+        result
+        // match self.ast.as_ref().last().unwrap() {
+        //     ENodeOrVar::ENode(e) => {
+        //         let key = e.discriminant();
+        //         match egraph.classes_by_op.get(&key) {
+        //             None => vec![],
+        //             Some(ids) => rewrite::default_search_eclasses_with_limit(
+        //                 self,
+        //                 egraph,
+        //                 eclasses.filter(|e| ids.contains(e)),
+        //                 limit,
+        //             ),
+        //         }
+        //     }
+        //     ENodeOrVar::Var(v) => eclasses
+        //         .map(|id| {
+        //             let mut subst = Subst::with_capacity(1);
+        //             subst.insert(*v, id);
+        //             SearchMatches {
+        //                 eclass: id,
+        //                 substs: vec![subst],
+        //                 ast: Some(Cow::Borrowed(&self.ast)),
+        //             }
+        //         })
+        //         .collect(),
+        // }
     }
 
     fn search_eclass_with_limit(
