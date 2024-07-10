@@ -179,7 +179,8 @@ impl Applier<Lambda, LambdaAnalysis> for CaptureAvoid {
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Lambda>>,
         rule_name: Symbol,
-    ) -> Vec<Id> {
+        appended_output: &mut Vec<Id>,
+    ) {
         let e = subst[self.e];
         let v2 = subst[self.v2];
         let v2_free_in_e = egraph[e].data.free.contains(&v2);
@@ -188,10 +189,10 @@ impl Applier<Lambda, LambdaAnalysis> for CaptureAvoid {
             let sym = Lambda::Symbol(format!("_{}", eclass).into());
             subst.insert(self.fresh, egraph.add(sym));
             self.if_free
-                .apply_one(egraph, eclass, &subst, searcher_ast, rule_name)
+                .apply_one(egraph, eclass, &subst, searcher_ast, rule_name, appended_output)
         } else {
             self.if_not_free
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, appended_output)
         }
     }
 }

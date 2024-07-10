@@ -469,7 +469,8 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-    ) -> Vec<Id> {
+        appended_output: &mut Vec<Id>,
+    ) {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
         let id = apply_pat(&mut id_buf, ast, egraph, subst);
@@ -478,14 +479,14 @@ where
             let (from, did_something) =
                 egraph.union_instantiations(ast, &self.ast, subst, rule_name);
             if did_something {
-                vec![from]
+                appended_output.push(from);
             } else {
-                vec![]
+                // Push nothing onto appended_output.
             }
         } else if egraph.union(eclass, id) {
-            vec![eclass]
+            appended_output.push(eclass);
         } else {
-            vec![]
+            // Push nothing onto appended_output.
         }
     }
 

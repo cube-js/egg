@@ -53,7 +53,8 @@ impl Applier<MyLang, ()> for ListMapApplier {
         subst: &Subst,
         _searcher_ast: Option<&PatternAst<MyLang>>,
         _rule_name: Symbol,
-    ) -> Vec<Id> {
+        appended_output: &mut Vec<Id>,
+    ) {
         let mut subst = subst.clone();
 
         let data = subst
@@ -81,9 +82,9 @@ impl Applier<MyLang, ()> for ListMapApplier {
         let result_id = egraph.add_instantiation(&self.list_pattern, &subst);
 
         if egraph.union(eclass, result_id) {
-            vec![result_id]
+            appended_output.push(result_id);
         } else {
-            vec![]
+            // Append nothing
         }
     }
 

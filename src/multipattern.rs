@@ -144,7 +144,8 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
-    ) -> Vec<Id> {
+        _appended_output: &mut Vec<Id>,
+    ) {
         panic!("Multipatterns do not support apply_one")
     }
 

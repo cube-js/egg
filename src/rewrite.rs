@@ -290,14 +290,14 @@ where
 ///
 /// impl Applier<Math, MinSize> for Funky {
 ///
-///     fn apply_one(&self, egraph: &mut EGraph, matched_id: Id, subst: &Subst, searcher_pattern: Option<&PatternAst<Math>>, rule_name: Symbol) -> Vec<Id> {
+///     fn apply_one(&self, egraph: &mut EGraph, matched_id: Id, subst: &Subst, searcher_pattern: Option<&PatternAst<Math>>, rule_name: Symbol, appended_output: &mut Vec<Id>) {
 ///         let a: Id = subst[self.a];
 ///         // In a custom Applier, you can inspect the analysis data,
 ///         // which is powerful combination!
 ///         let size_of_a = egraph[a].data;
 ///         if size_of_a > 50 {
 ///             println!("Too big! Not doing anything");
-///             vec![]
+///             // Return nothing to appended_output.
 ///         } else {
 ///             // we're going to manually add:
 ///             // (+ (+ ?a 0) (* (+ ?b 0) (+ ?c 0)))
@@ -313,9 +313,9 @@ where
 ///             let a0b0c0 = egraph.add(Math::Add([a0, b0c0]));
 ///             // Don't forget to union the new node with the matched node!
 ///             if egraph.union(matched_id, a0b0c0) {
-///                 vec![a0b0c0]
+///                 appended_output.push(a0b0c0);
 ///             } else {
-///                 vec![]
+///                 // Return nothing to appended_output.
 ///             }
 ///         }
 ///     }
@@ -352,8 +352,7 @@ where
                 None
             };
             for subst in &mat.substs {
-                let ids = self.apply_one(egraph, mat.eclass, subst, ast, rule_name);
-                added.extend(ids)
+                self.apply_one(egraph, mat.eclass, subst, ast, rule_name, &mut added);
             }
         }
         added
@@ -370,10 +369,10 @@ where
     /// Appliers can also inspect the eclass if necessary using the
     /// `eclass` parameter.
     ///
-    /// This should return a list of [`Id`]s of eclasses that
-    /// were changed. There can be zero, one, or many.
-    /// When explanations mode is enabled, a [`PatternAst`] for
-    /// the searcher is provided.
+    /// This will append to `appended_output` a list of [`Id`]s of
+    /// eclasses that were changed. There can be zero, one, or many.
+    /// When explanations mode is enabled, a [`PatternAst`] for the
+    /// searcher is provided.
     ///
     /// [`apply_matches`]: Applier::apply_matches()
     fn apply_one(
@@ -383,7 +382,8 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-    ) -> Vec<Id>;
+        appended_output: &mut Vec<Id>,
+    );
 
     /// Returns a list of variables that this Applier assumes are bound.
     ///
@@ -437,12 +437,13 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-    ) -> Vec<Id> {
+        appended_output: &mut Vec<Id>,
+    ) {
         if self.condition.check(egraph, eclass, subst) {
             self.applier
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, appended_output)
         } else {
-            vec![]
+            // Append nothing.
         }
     }
 
@@ -619,7 +620,8 @@ mod tests {
                 subst: &Subst,
                 searcher_ast: Option<&PatternAst<SymbolLang>>,
                 rule_name: Symbol,
-            ) -> Vec<Id> {
+                appended_output: &mut Vec<Id>,
+            ) {
                 let a: Var = "?a".parse().unwrap();
                 let b: Var = "?b".parse().unwrap();
                 let a = get(egraph, subst[a]);
@@ -633,16 +635,16 @@ mod tests {
                         rule_name,
                     );
                     if did_something {
-                        vec![id]
+                        appended_output.push(id);
                     } else {
-                        vec![]
+                        // Return nothing to appended_output.
                     }
                 } else {
                     let added = egraph.add(S::leaf(&s));
                     if egraph.union(added, eclass) {
-                        vec![eclass]
+                        appended_output.push(eclass);
                     } else {
-                        vec![]
+                        // Return nothing to appended_output.
                     }
                 }
             }
