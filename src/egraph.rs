@@ -4,6 +4,8 @@ use std::{
     fmt::{self, Debug, Display},
     marker::PhantomData,
 };
+use bit_set::BitSet;
+
 
 #[cfg(feature = "serde-1")]
 use serde::{Deserialize, Serialize};
@@ -79,7 +81,7 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
     pub(crate) classes: HashMap<Id, EClass<L, N::Data>>,
     #[cfg_attr(feature = "serde-1", serde(skip))]
     #[cfg_attr(feature = "serde-1", serde(default = "default_classes_by_op"))]
-    pub(crate) classes_by_op: HashMap<L::Discriminant, HashSet<Id>>,
+    pub(crate) classes_by_op: HashMap<L::Discriminant, BitSet>,
     /// Whether or not reading operation are allowed on this e-graph.
     /// Mutating operations will set this to `false`, and
     /// [`EGraph::rebuild`] will set it to true.
@@ -90,8 +92,8 @@ pub struct EGraph<L: Language, N: Analysis<L>> {
 }
 
 #[cfg(feature = "serde-1")]
-fn default_classes_by_op<K>() -> HashMap<K, HashSet<Id>> {
-    HashMap::default()
+fn default_classes_by_op<K>() -> HashMap<K, BitSet> {
+    BitSet::default()
 }
 
 impl<L: Language, N: Analysis<L> + Default> Default for EGraph<L, N> {
@@ -1320,7 +1322,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
                 classes_by_op
                     .entry(n.discriminant())
                     .or_default()
-                    .insert(class.id)
+                    .insert(usize::from(class.id))
             };
 
             // we can go through the ops in order to dedup them, becaue we
@@ -1339,7 +1341,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
         #[cfg(debug_assertions)]
         for ids in classes_by_op.values_mut() {
-            let unique: HashSet<Id> = ids.iter().copied().collect();
+            let unique: HashSet<Id> = ids.iter().map(Id::from).collect();
             assert_eq!(ids.len(), unique.len());
         }
 

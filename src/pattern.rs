@@ -160,7 +160,7 @@ impl<L: Language> Pattern<L> {
                     Some(ids) => {
                         let mut machine = Machine::default();
                         for id in eclasses {
-                            if ids.contains(&id) {
+                            if ids.contains(usize::from(id)) {
                                 machine
                                     .run_program(egraph, &self.program, id, |subst| f(id, subst))?;
                             }
