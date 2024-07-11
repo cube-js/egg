@@ -553,13 +553,14 @@ where
 
         result = result.and_then(|_| {
             let mut ids = Vec::<Id>::new();
+            ids.reserve_exact(512);
             rules.iter().zip(matches).try_for_each(|(rw, ms)| {
                 let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
                 debug!("Applying {} {} times", rw.name, total_matches);
 
-                let ids_original_len = ids.len();
+                ids.clear();
                 self.scheduler.apply_rewrite(i, &mut self.egraph, rw, ms, &mut ids);
-                let actually_matched = ids.len() - ids_original_len;
+                let actually_matched = ids.len();
                 if actually_matched > 0 {
                     if let Some(count) = applied.get_mut(&rw.name) {
                         *count += actually_matched;
