@@ -94,8 +94,8 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     /// Call [`apply_matches`] on the [`Applier`].
     ///
     /// [`apply_matches`]: Applier::apply_matches()
-    pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>]) -> Vec<Id> {
-        self.applier.apply_matches(egraph, matches, self.name)
+    pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>], appended_output: &mut Vec<Id>) {
+        self.applier.apply_matches(egraph, matches, self.name, appended_output);
     }
 
     /// This `run` is for testing use only. You should use things
@@ -107,7 +107,8 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
         let matches = self.search(egraph);
         log::debug!("Found rewrite {} {} times", self.name, matches.len());
 
-        let ids = self.apply(egraph, &matches);
+        let mut ids = Vec::new();
+        self.apply(egraph, &matches, &mut ids);
         let elapsed = start.elapsed();
         log::debug!(
             "Applied rewrite {} {} times in {}.{:03}",
@@ -333,9 +334,9 @@ where
     ///
     /// This method should call [`apply_one`] for each match.
     ///
-    /// It returns the ids resulting from the calls to [`apply_one`].
-    /// The default implementation does this and should suffice for
-    /// most use cases.
+    /// It returns the ids (to appended_output) resulting from the
+    /// calls to [`apply_one`]. The default implementation does this
+    /// and should suffice for most use cases.
     ///
     /// [`apply_one`]: Applier::apply_one()
     fn apply_matches(
@@ -343,8 +344,8 @@ where
         egraph: &mut EGraph<L, N>,
         matches: &[SearchMatches<L>],
         rule_name: Symbol,
-    ) -> Vec<Id> {
-        let mut added = vec![];
+        appended_output: &mut Vec<Id>,
+    ) {
         for mat in matches {
             let ast = if egraph.are_explanations_enabled() {
                 mat.ast.as_ref().map(|cow| cow.as_ref())
@@ -352,10 +353,9 @@ where
                 None
             };
             for subst in &mat.substs {
-                self.apply_one(egraph, mat.eclass, subst, ast, rule_name, &mut added);
+                self.apply_one(egraph, mat.eclass, subst, ast, rule_name, appended_output);
             }
         }
-        added
     }
 
     /// For patterns, get the ast directly as a reference.

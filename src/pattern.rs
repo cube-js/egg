@@ -435,8 +435,8 @@ where
         egraph: &mut EGraph<L, A>,
         matches: &[SearchMatches<L>],
         rule_name: Symbol,
-    ) -> Vec<Id> {
-        let mut added = vec![];
+        appended_output: &mut Vec<Id>,
+    ) {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
         for mat in matches {
@@ -455,11 +455,10 @@ where
                 }
 
                 if did_something {
-                    added.push(id)
+                    appended_output.push(id);
                 }
             }
         }
-        added
     }
 
     fn apply_one(
@@ -548,7 +547,8 @@ mod tests {
         let n_matches: usize = matches.iter().map(|m| m.substs.len()).sum();
         assert_eq!(n_matches, 2, "matches is wrong: {:#?}", matches);
 
-        let applications = commute_plus.apply(&mut egraph, &matches);
+        let mut applications = Vec::new();
+        commute_plus.apply(&mut egraph, &matches, &mut applications);
         egraph.rebuild();
         assert_eq!(applications.len(), 2);
 

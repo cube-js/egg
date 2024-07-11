@@ -154,10 +154,10 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         egraph: &mut EGraph<L, A>,
         matches: &[SearchMatches<L>],
         _rule_name: Symbol,
-    ) -> Vec<Id> {
+        appended_output: &mut Vec<Id>,
+    ) {
         // TODO explanations?
         // the ids returned are kinda garbage
-        let mut added = vec![];
         for mat in matches {
             for subst in &mat.substs {
                 let mut subst = subst.clone();
@@ -169,12 +169,11 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
                         egraph.union(id1, id2);
                     }
                     if i == 0 {
-                        added.push(id1)
+                        appended_output.push(id1)
                     }
                 }
             }
         }
-        added
     }
 
     fn vars(&self) -> Vec<Var> {

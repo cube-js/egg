@@ -707,7 +707,9 @@ where
         rewrite: &Rewrite<L, N>,
         matches: Vec<SearchMatches<L>>,
     ) -> usize {
-        rewrite.apply(egraph, &matches).len()
+        let mut ids = Vec::new();
+        rewrite.apply(egraph, &matches, &mut ids);
+        ids.len()
     }
 }
 
