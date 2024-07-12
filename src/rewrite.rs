@@ -94,32 +94,31 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     /// Call [`apply_matches`] on the [`Applier`].
     ///
     /// [`apply_matches`]: Applier::apply_matches()
-    pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>], appended_output: &mut Vec<Id>) {
-        self.applier.apply_matches(egraph, matches, self.name, appended_output);
+    pub fn apply(&self, egraph: &mut EGraph<L, N>, matches: &[SearchMatches<L>]) -> usize {
+        self.applier.apply_matches(egraph, matches, self.name)
     }
 
     /// This `run` is for testing use only. You should use things
     /// from the `egg::run` module
     #[cfg(test)]
-    pub(crate) fn run(&self, egraph: &mut EGraph<L, N>) -> Vec<Id> {
+    pub(crate) fn run(&self, egraph: &mut EGraph<L, N>) -> usize {
         let start = crate::util::Instant::now();
 
         let matches = self.search(egraph);
         log::debug!("Found rewrite {} {} times", self.name, matches.len());
 
-        let mut ids = Vec::new();
-        self.apply(egraph, &matches, &mut ids);
+        let num_applys = self.apply(egraph, &matches);
         let elapsed = start.elapsed();
         log::debug!(
             "Applied rewrite {} {} times in {}.{:03}",
             self.name,
-            ids.len(),
+            num_applys,
             elapsed.as_secs(),
             elapsed.subsec_millis()
         );
 
         egraph.rebuild();
-        ids
+        num_applys
     }
 }
 
@@ -291,14 +290,14 @@ where
 ///
 /// impl Applier<Math, MinSize> for Funky {
 ///
-///     fn apply_one(&self, egraph: &mut EGraph, matched_id: Id, subst: &Subst, searcher_pattern: Option<&PatternAst<Math>>, rule_name: Symbol, appended_output: &mut Vec<Id>) {
+///     fn apply_one(&self, egraph: &mut EGraph, matched_id: Id, subst: &Subst, searcher_pattern: Option<&PatternAst<Math>>, rule_name: Symbol) -> usize {
 ///         let a: Id = subst[self.a];
 ///         // In a custom Applier, you can inspect the analysis data,
 ///         // which is powerful combination!
 ///         let size_of_a = egraph[a].data;
 ///         if size_of_a > 50 {
 ///             println!("Too big! Not doing anything");
-///             // Return nothing to appended_output.
+///             0
 ///         } else {
 ///             // we're going to manually add:
 ///             // (+ (+ ?a 0) (* (+ ?b 0) (+ ?c 0)))
@@ -314,9 +313,9 @@ where
 ///             let a0b0c0 = egraph.add(Math::Add([a0, b0c0]));
 ///             // Don't forget to union the new node with the matched node!
 ///             if egraph.union(matched_id, a0b0c0) {
-///                 appended_output.push(a0b0c0);
+///                 1
 ///             } else {
-///                 // Return nothing to appended_output.
+///                 0
 ///             }
 ///         }
 ///     }
@@ -334,9 +333,9 @@ where
     ///
     /// This method should call [`apply_one`] for each match.
     ///
-    /// It returns the ids (to appended_output) resulting from the
-    /// calls to [`apply_one`]. The default implementation does this
-    /// and should suffice for most use cases.
+    /// It returns the number of ids resulting from the calls to
+    /// [`apply_one`]. The default implementation does this and should
+    /// suffice for most use cases.
     ///
     /// [`apply_one`]: Applier::apply_one()
     fn apply_matches(
@@ -344,8 +343,8 @@ where
         egraph: &mut EGraph<L, N>,
         matches: &[SearchMatches<L>],
         rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
+        let mut sum: usize = 0usize;
         for mat in matches {
             let ast = if egraph.are_explanations_enabled() {
                 mat.ast.as_ref().map(|cow| cow.as_ref())
@@ -353,9 +352,10 @@ where
                 None
             };
             for subst in &mat.substs {
-                self.apply_one(egraph, mat.eclass, subst, ast, rule_name, appended_output);
+                sum += self.apply_one(egraph, mat.eclass, subst, ast, rule_name);
             }
         }
+        sum
     }
 
     /// For patterns, get the ast directly as a reference.
@@ -369,10 +369,9 @@ where
     /// Appliers can also inspect the eclass if necessary using the
     /// `eclass` parameter.
     ///
-    /// This will append to `appended_output` a list of [`Id`]s of
-    /// eclasses that were changed. There can be zero, one, or many.
-    /// When explanations mode is enabled, a [`PatternAst`] for the
-    /// searcher is provided.
+    /// This returns the number of ids of eclasses that were changed.
+    /// This can be zero, one, or many. When explanations mode is
+    /// enabled, a [`PatternAst`] for the searcher is provided.
     ///
     /// [`apply_matches`]: Applier::apply_matches()
     fn apply_one(
@@ -382,8 +381,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    );
+    ) -> usize;
 
     /// Returns a list of variables that this Applier assumes are bound.
     ///
@@ -437,13 +435,12 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
         if self.condition.check(egraph, eclass, subst) {
             self.applier
-                .apply_one(egraph, eclass, subst, searcher_ast, rule_name, appended_output)
+                .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
-            // Append nothing.
+            0
         }
     }
 
@@ -577,7 +574,7 @@ mod tests {
         println!("rewrite shouldn't do anything yet");
         egraph.rebuild();
         let apps = mul_to_shift.run(&mut egraph);
-        assert!(apps.is_empty());
+        assert_eq!(0, apps);
 
         println!("Add the needed equality");
         egraph.union_instantiations(
@@ -590,7 +587,9 @@ mod tests {
         println!("Should fire now");
         egraph.rebuild();
         let apps = mul_to_shift.run(&mut egraph);
-        assert_eq!(apps, vec![egraph.find(mul)]);
+        // TODO: Can't do this assertion
+        // assert_eq!(apps, vec![egraph.find(mul)]);
+        assert_eq!(1, apps);
     }
 
     #[test]
@@ -620,8 +619,7 @@ mod tests {
                 subst: &Subst,
                 searcher_ast: Option<&PatternAst<SymbolLang>>,
                 rule_name: Symbol,
-                appended_output: &mut Vec<Id>,
-            ) {
+            ) -> usize {
                 let a: Var = "?a".parse().unwrap();
                 let b: Var = "?b".parse().unwrap();
                 let a = get(egraph, subst[a]);
@@ -635,16 +633,16 @@ mod tests {
                         rule_name,
                     );
                     if did_something {
-                        appended_output.push(id);
+                        1
                     } else {
-                        // Return nothing to appended_output.
+                        0
                     }
                 } else {
                     let added = egraph.add(S::leaf(&s));
                     if egraph.union(added, eclass) {
-                        appended_output.push(eclass);
+                        1
                     } else {
-                        // Return nothing to appended_output.
+                        0
                     }
                 }
             }

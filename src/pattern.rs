@@ -435,10 +435,10 @@ where
         egraph: &mut EGraph<L, A>,
         matches: &[SearchMatches<L>],
         rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
+        let mut count = 0;
         for mat in matches {
             let sast = mat.ast.as_ref().map(|cow| cow.as_ref());
             for subst in &mat.substs {
@@ -455,10 +455,11 @@ where
                 }
 
                 if did_something {
-                    appended_output.push(id);
+                    count += 1;
                 }
             }
         }
+        count
     }
 
     fn apply_one(
@@ -468,8 +469,7 @@ where
         subst: &Subst,
         searcher_ast: Option<&PatternAst<L>>,
         rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
         let ast = self.ast.as_ref();
         let mut id_buf = vec![0.into(); ast.len()];
         let id = apply_pat(&mut id_buf, ast, egraph, subst);
@@ -478,14 +478,14 @@ where
             let (from, did_something) =
                 egraph.union_instantiations(ast, &self.ast, subst, rule_name);
             if did_something {
-                appended_output.push(from);
+                1
             } else {
-                // Push nothing onto appended_output.
+                0
             }
         } else if egraph.union(eclass, id) {
-            appended_output.push(eclass);
+            1
         } else {
-            // Push nothing onto appended_output.
+            0
         }
     }
 
@@ -547,10 +547,9 @@ mod tests {
         let n_matches: usize = matches.iter().map(|m| m.substs.len()).sum();
         assert_eq!(n_matches, 2, "matches is wrong: {:#?}", matches);
 
-        let mut applications = Vec::new();
-        commute_plus.apply(&mut egraph, &matches, &mut applications);
+        let num_applications = commute_plus.apply(&mut egraph, &matches);
         egraph.rebuild();
-        assert_eq!(applications.len(), 2);
+        assert_eq!(num_applications, 2);
 
         let actual_substs: Vec<Subst> = matches.iter().flat_map(|m| m.substs.clone()).collect();
 

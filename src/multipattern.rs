@@ -144,8 +144,7 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         _subst: &Subst,
         _searcher_ast: Option<&PatternAst<L>>,
         _rule_name: Symbol,
-        _appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
         panic!("Multipatterns do not support apply_one")
     }
 
@@ -154,10 +153,10 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
         egraph: &mut EGraph<L, A>,
         matches: &[SearchMatches<L>],
         _rule_name: Symbol,
-        appended_output: &mut Vec<Id>,
-    ) {
+    ) -> usize {
         // TODO explanations?
         // the ids returned are kinda garbage
+        let mut count = 0;
         for mat in matches {
             for subst in &mat.substs {
                 let mut subst = subst.clone();
@@ -169,11 +168,12 @@ impl<L: Language, A: Analysis<L>> Applier<L, A> for MultiPattern<L> {
                         egraph.union(id1, id2);
                     }
                     if i == 0 {
-                        appended_output.push(id1)
+                        count += 1;
                     }
                 }
             }
         }
+        count
     }
 
     fn vars(&self) -> Vec<Var> {

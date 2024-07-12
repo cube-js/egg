@@ -552,15 +552,11 @@ where
         let apply_time = Instant::now();
 
         result = result.and_then(|_| {
-            let mut ids = Vec::<Id>::new();
-            ids.reserve_exact(512);
             rules.iter().zip(matches).try_for_each(|(rw, ms)| {
                 let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
                 debug!("Applying {} {} times", rw.name, total_matches);
 
-                ids.clear();
-                self.scheduler.apply_rewrite(i, &mut self.egraph, rw, ms, &mut ids);
-                let actually_matched = ids.len();
+                let actually_matched = self.scheduler.apply_rewrite(i, &mut self.egraph, rw, ms);
                 if actually_matched > 0 {
                     if let Some(count) = applied.get_mut(&rw.name) {
                         *count += actually_matched;
@@ -710,9 +706,8 @@ where
         egraph: &mut EGraph<L, N>,
         rewrite: &Rewrite<L, N>,
         matches: Vec<SearchMatches<L>>,
-        appended_output: &mut Vec<Id>,
-    ) {
-        rewrite.apply(egraph, &matches, appended_output);
+    ) -> usize {
+        rewrite.apply(egraph, &matches)
     }
 }
 
