@@ -1,3 +1,4 @@
+#![allow(clippy::only_used_in_recursion)]
 use crate::Symbol;
 use crate::{
     util::pretty_print, Analysis, EClass, ENodeOrVar, FromOp, HashMap, HashSet, Id, Language,
@@ -10,10 +11,9 @@ use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
-use symbolic_expressions::Sexp;
-
 use num_bigint::BigUint;
 use num_traits::identities::{One, Zero};
+use symbolic_expressions::Sexp;
 
 type ProofCost = BigUint;
 
@@ -375,11 +375,11 @@ impl<L: Language> Explanation<L> {
 
     /// Check the validity of the explanation with respect to the given rules.
     /// This only is able to check rule applications when the rules are implement `get_pattern_ast`.
-    pub fn check_proof<'a, R, N: Analysis<L>>(&mut self, rules: R)
+    pub fn check_proof<'a, R, N>(&mut self, rules: R)
     where
         R: IntoIterator<Item = &'a Rewrite<L, N>>,
         L: 'a,
-        N: 'a,
+        N: Analysis<L> + 'a,
     {
         let rules: Vec<&Rewrite<L, N>> = rules.into_iter().collect();
         let rule_table = Explain::make_rule_table(rules.as_slice());
@@ -1276,18 +1276,21 @@ impl<'x, L: Language> ExplainNodes<'x, L> {
         if graphnode.parent_connection.next == existance
             || existance_node.parent_connection.next == node
         {
-            let mut connection = graphnode.parent_connection.clone();
+            let mut connection = if graphnode.parent_connection.next == existance {
+                graphnode.parent_connection.clone()
+            } else {
+                existance_node.parent_connection.clone()
+            };
 
             if graphnode.parent_connection.next == existance {
                 connection.is_rewrite_forward = !connection.is_rewrite_forward;
                 std::mem::swap(&mut connection.next, &mut connection.current);
             }
-            return self.explain_enode_existance(
-                existance,
-                self.explain_adjacent(connection, cache, enode_cache, false),
-                cache,
-                enode_cache,
-            );
+
+            let adj = self.explain_adjacent(connection, cache, enode_cache, false);
+            let mut exp = self.explain_enode_existance(existance, adj, cache, enode_cache);
+            exp.push(rest_of_proof);
+            return exp;
         }
 
         // case 3)
@@ -1407,8 +1410,7 @@ impl<'x, L: Language> ExplainNodes<'x, L> {
         let mut enodes = HashSet::default();
         let mut todo = vec![eclass];
 
-        while !todo.is_empty() {
-            let current = todo.pop().unwrap();
+        while let Some(current) = todo.pop() {
             if enodes.insert(current) {
                 for neighbor in &self.explainfind[usize::from(current)].neighbors {
                     todo.push(neighbor.next);
@@ -1944,7 +1946,6 @@ impl<'x, L: Language> ExplainNodes<'x, L> {
 
 #[cfg(test)]
 mod tests {
-
     use super::super::*;
 
     #[test]
@@ -2048,6 +2049,35 @@ mod tests {
         );
 
         egraph.dot().to_dot("target/foo.dot").unwrap();
+    }
+
+    #[test]
+    fn simple_explain_exists() {
+        //! Same as previous test, but now I want to make a rewrite add some term and see it exists in
+        //! more then one step
+        use crate::SymbolLang;
+        init_logger();
+
+        let rws: Vec<Rewrite<SymbolLang, ()>> =
+            [rewrite!("makeb"; "a" => "b"), rewrite!("makec"; "b" => "c")].to_vec();
+        let mut egraph = Runner::default()
+            .with_explanations_enabled()
+            .without_explanation_length_optimization()
+            .with_expr(&"a".parse().unwrap())
+            .run(&rws)
+            .egraph;
+        egraph.rebuild();
+        let _a: Symbol = "a".parse().unwrap();
+        let _b: Symbol = "b".parse().unwrap();
+        let _c: Symbol = "c".parse().unwrap();
+        let mut exp = egraph.explain_existance(&"c".parse().unwrap());
+        println!("{:?}", exp.make_flat_explanation());
+        assert_eq!(
+            exp.make_flat_explanation().len(),
+            3,
+            "Expected 3 steps, got {:?}",
+            exp.make_flat_explanation()
+        );
     }
 }
 
