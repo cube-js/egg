@@ -127,6 +127,14 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
         }
     }
 
+    /// Returns an iterator over the (non-canonical id, enode) in the egraph.
+    pub fn nodes(&self) -> impl ExactSizeIterator<Item = (Id, &L)> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| (Id::from(idx), node))
+    }
+
     /// Returns an iterator over the eclasses in the egraph.
     pub fn classes(&self) -> impl ExactSizeIterator<Item = &EClass<L, N::Data>> {
         self.classes.values()
